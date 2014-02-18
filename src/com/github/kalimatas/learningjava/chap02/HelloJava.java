@@ -20,12 +20,14 @@ public class HelloJava
 }
 
 class HelloComponent2 extends JComponent
-    implements MouseMotionListener, ActionListener
+    implements MouseMotionListener, ActionListener, Runnable
 {
     String message;
     int messageX = 125, messageY = 84;
 
     JButton button;
+
+    boolean isBlinking;
 
     int colorIndex;
     static Color[] colors = {Color.red, Color.green, Color.yellow, Color.blue};
@@ -41,10 +43,13 @@ class HelloComponent2 extends JComponent
 
         addMouseMotionListener(this);
 
+        Thread t = new Thread(this);
+        t.start();
     }
 
     @Override
     public void paintComponent(Graphics g) {
+        g.setColor(isBlinking ? getBackground() : getCurrentColor());
         g.drawString(this.message, this.messageX, this.messageY);
     }
 
@@ -79,5 +84,16 @@ class HelloComponent2 extends JComponent
 
     synchronized private Color getCurrentColor() {
         return colors[colorIndex];
+    }
+
+    @Override
+    public void run() {
+        try {
+            while (true) {
+                isBlinking = !isBlinking;
+                repaint();
+                Thread.sleep(300);
+            }
+        } catch (InterruptedException e) {}
     }
 }
