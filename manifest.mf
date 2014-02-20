@@ -1,0 +1,1 @@
+Main-Class: com/github/kalimatas/learningjava/chap02/HelloJava

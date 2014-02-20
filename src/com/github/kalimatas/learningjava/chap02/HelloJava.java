@@ -94,6 +94,8 @@ class HelloComponent2 extends JComponent
                 repaint();
                 Thread.sleep(300);
             }
-        } catch (InterruptedException e) {}
+        } catch (InterruptedException e) {
+            System.out.println(e.getMessage());
+        }
     }
 }
