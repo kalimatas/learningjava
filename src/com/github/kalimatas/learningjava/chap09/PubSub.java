@@ -2,7 +2,7 @@ package com.github.kalimatas.learningjava.chap09;
 
 import java.util.*;
 
-public class Concurrency {
+public class PubSub {
     public static void main(String[] args) {
         Producer producer = new Producer();
         new Thread(producer).start();
