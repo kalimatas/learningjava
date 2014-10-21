@@ -8,6 +8,8 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -74,6 +76,7 @@ class GameServer {
     private static final Logger LOGGER = Logger.getLogger(GameServer.class.getName());
 
     private SocketChannel csc;
+    private CharsetDecoder asciiDecoder = Charset.forName("US-ASCII").newDecoder();
 
     private List<SocketChannel> clients = new LinkedList<>();
     private ServerSocketChannel ssc;
@@ -86,10 +89,28 @@ class GameServer {
         LOGGER.info("starting client");
 
         try {
-            csc = SocketChannel.open();
+            csc = SocketChannel.open(new InetSocketAddress(InetAddress.getLoopbackAddress(), PORT));
             csc.configureBlocking(false);
-            csc.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), PORT));
-            while (!csc.finishConnect()) {}
+            //while (!csc.finishConnect()) {}
+
+            while (true) {
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                ByteBuffer buf = ByteBuffer.allocate(255);
+                int bytesRead = csc.read(buf);
+                if (bytesRead != -1 && bytesRead != 0) {
+                    buf.flip();
+                    System.out.println(asciiDecoder.decode(buf).toString());
+                    // baos.write(buf.array(), 0, bytesRead);
+                    buf.clear();
+                }
+
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+
         } catch (IOException e) {
             LOGGER.severe("cannot connect to server");
             e.printStackTrace();
@@ -132,10 +153,16 @@ class GameServer {
                 LOGGER.info("got connection from " + clientChannel.socket().getInetAddress());
 
                 // add client to the list
-
+                clients.add(clientChannel);
+                clientChannel.configureBlocking(false);
+                //SelectionKey readKey = clientChannel.register(readSelector, SelectionKey.OP_READ);
 
                 // send broadcast
-                // send reply to the new client
+                sendBroadcastingMessage("New client: " + clientChannel.socket().getInetAddress());
+
+                // send welcome to the new client
+                sendMessage(clientChannel, "Welcome to server! There are " + clients.size() + " online.");
+
             }
         } catch (IOException e) {
             LOGGER.warning("error while accept()");
@@ -146,13 +173,31 @@ class GameServer {
         }
     }
 
+    private void sendMessage(SocketChannel channel, String message) {
+        channelWrite(channel, message);
+    }
+
+    private void sendBroadcastingMessage(String message) {
+        for (SocketChannel channel : clients) {
+            channelWrite(channel, message);
+        }
+    }
+
+    private void channelWrite(SocketChannel channel, String message) {
+        try {
+            channel.write(ByteBuffer.wrap(message.getBytes()));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     private void readMessages() {
 
     }
 }
 
 /*
-ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
             ByteBuffer buf = ByteBuffer.allocate(2048);
             int bytesRead;
