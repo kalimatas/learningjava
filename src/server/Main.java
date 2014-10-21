@@ -4,10 +4,7 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.util.Iterator;
@@ -91,30 +88,49 @@ class GameServer {
         try {
             csc = SocketChannel.open(new InetSocketAddress(InetAddress.getLoopbackAddress(), PORT));
             csc.configureBlocking(false);
-            //while (!csc.finishConnect()) {}
+
+            // send messages to server
+            (new ClientWriter(csc)).start();
 
             while (true) {
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ByteBuffer buf = ByteBuffer.allocate(255);
-                int bytesRead = csc.read(buf);
-                if (bytesRead != -1 && bytesRead != 0) {
-                    buf.flip();
-                    System.out.println(asciiDecoder.decode(buf).toString());
-                    // baos.write(buf.array(), 0, bytesRead);
-                    buf.clear();
+                Packet packet = readPacket(csc);
+                if (packet != null) {
+                    System.out.println(packet.get());
+                    System.out.println(packet.get());
                 }
 
-                try {
-                    Thread.sleep(200);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+                Thread.sleep(200);
             }
 
         } catch (IOException e) {
             LOGGER.severe("cannot connect to server");
             e.printStackTrace();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
+    }
+
+    private Packet readPacket(SocketChannel channel) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ByteBuffer buffer = ByteBuffer.allocate(1024);
+            int bytesRead = channel.read(buffer);
+
+            while (bytesRead != 0) {
+                buffer.flip();
+                baos.write(buffer.array(), 0, bytesRead);
+                buffer.clear();
+                bytesRead = channel.read(buffer);
+            }
+
+            if (baos.size() > 0) {
+                return Packet.decode(baos.toByteArray());
+            }
+        } catch (ClassNotFoundException | IOException e) {
+            e.printStackTrace();
+        }
+
+        return null;
     }
 
     /**
@@ -158,10 +174,10 @@ class GameServer {
                 //SelectionKey readKey = clientChannel.register(readSelector, SelectionKey.OP_READ);
 
                 // send broadcast
-                sendBroadcastingMessage("New client: " + clientChannel.socket().getInetAddress());
+                sendBroadcastingMessage("New client: " + clientChannel.socket().getInetAddress() + "\n");
 
                 // send welcome to the new client
-                sendMessage(clientChannel, "Welcome to server! There are " + clients.size() + " online.");
+                sendMessage(clientChannel, "Welcome to server! There are " + clients.size() + " online.\n");
 
             }
         } catch (IOException e) {
@@ -185,7 +201,9 @@ class GameServer {
 
     private void channelWrite(SocketChannel channel, String message) {
         try {
-            channel.write(ByteBuffer.wrap(message.getBytes()));
+            Packet packet = new Packet();
+            packet.append(message);
+            channel.write(ByteBuffer.wrap(Packet.encode(packet)));
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -196,53 +214,74 @@ class GameServer {
     }
 }
 
-/*
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+class ClientWriter extends Thread
+{
+    private SocketChannel channel;
+    private boolean running = true;
 
-            ByteBuffer buf = ByteBuffer.allocate(2048);
-            int bytesRead;
-            while ((bytesRead = socketChannel.read(buf)) != -1) {
-                buf.flip();
-                baos.write(buf.array(), 0, bytesRead);
-                buf.clear();
+    ClientWriter(SocketChannel channel) {
+        this.channel = channel;
+    }
+
+    public void run() {
+        int elapsed = 0, step = 200;
+        while (running) {
+            try {
+                Thread.sleep(step);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+                break;
             }
 
-            Packet packet = Packet.decode(baos.toByteArray());
-            System.out.println("got: " + packet.get());
-            System.out.println("got: " + packet.get());
- */
+            elapsed += step;
 
-/*
-        Packet packet = new Packet();
-                packet.append("send from server");
-                packet.append(42);
+            // each two seconds
+            if (elapsed >= 4000) {
+                try {
+                    String message = "message from client: " + channel.socket().getInetAddress();
+                    Packet packet = new Packet();
+                    packet.append(message);
+                    channel.write(ByteBuffer.wrap(Packet.encode(packet)));
 
-                socketChannel.write(ByteBuffer.wrap(Packet.encode(packet)));
-        */
-
-        /*
-        Selector selector = Selector.open();
-        ssc.register(selector, SelectionKey.OP_ACCEPT);
-
-        while (true) {
-            selector.select();
-            Set<SelectionKey> keys = selector.keys();
-            Iterator<SelectionKey> i = keys.iterator();
-
-            while (i.hasNext()) {
-                SelectionKey key = i.next();
-                i.remove();
-
-                if (key.isAcceptable()) {
-                    SocketChannel client = ssc.accept();
-                    client.configureBlocking(false);
-                    client.register(selector, SelectionKey.OP_READ);
-                    continue;
+                    elapsed = 0;
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    shutdown();
                 }
 
-                if (key.isReadable()) {
-
-                }
             }
         }
-        */
+    }
+
+    public void shutdown() {
+        running = false;
+        interrupt();
+    }
+}
+
+/*
+Selector selector = Selector.open();
+ssc.register(selector, SelectionKey.OP_ACCEPT);
+
+while (true) {
+    selector.select();
+    Set<SelectionKey> keys = selector.keys();
+    Iterator<SelectionKey> i = keys.iterator();
+
+    while (i.hasNext()) {
+        SelectionKey key = i.next();
+        i.remove();
+
+        if (key.isAcceptable()) {
+            SocketChannel client = ssc.accept();
+            client.configureBlocking(false);
+            client.register(selector, SelectionKey.OP_READ);
+            continue;
+        }
+
+        if (key.isReadable()) {
+
+        }
+    }
+}
+*/
