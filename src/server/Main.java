@@ -78,6 +78,7 @@ class GameServer {
 
     private SocketChannel csc;
     private boolean clientRunning = true;
+    private ByteBuffer clientReadBuffer = ByteBuffer.allocate(1024);
 
     private List<SocketChannel> clients = new LinkedList<>();
     private ServerSocketChannel ssc;
@@ -96,7 +97,8 @@ class GameServer {
             csc.register(readSelector, SelectionKey.OP_READ);
 
             while (clientRunning) {
-                readSelector.selectNow();
+                int ready = readSelector.selectNow();
+                LOGGER.info("ready: " + ready);
 
                 Set<SelectionKey> readKeys = readSelector.selectedKeys();
                 Iterator<SelectionKey> it = readKeys.iterator();
@@ -105,13 +107,15 @@ class GameServer {
                     SelectionKey key = it.next();
                     it.remove();
 
-                    Packet packet = readPacket((SocketChannel) key.channel());
+                    SocketChannel channel = (SocketChannel) key.channel();
+
+                    Packet packet = readPacket(channel);
                     if (packet != null) {
                         LOGGER.info((String) packet.get());
                     }
                 }
 
-                Thread.sleep(100);
+                Thread.sleep(300);
             }
 
         } catch (IOException e) {
@@ -123,10 +127,12 @@ class GameServer {
     }
 
     private Packet readPacket(SocketChannel channel) {
+        LOGGER.info("reading packet");
+
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ByteBuffer buffer = ByteBuffer.allocate(1024);
-            int bytesRead = channel.read(buffer);
+            clientReadBuffer.clear();
+            int bytesRead = channel.read(clientReadBuffer);
 
             if (bytesRead == -1) {
                 channel.close();
@@ -135,11 +141,13 @@ class GameServer {
                 return null;
             }
 
+            clientReadBuffer.flip();
             while (bytesRead != 0) {
-                buffer.flip();
-                baos.write(buffer.array(), 0, bytesRead);
-                buffer.clear();
-                bytesRead = channel.read(buffer);
+                baos.write(clientReadBuffer.array(), 0, bytesRead);
+                bytesRead = channel.read(clientReadBuffer);
+
+                clientReadBuffer.clear();
+                clientReadBuffer.flip();
             }
 
             if (baos.size() > 0) {
@@ -221,9 +229,32 @@ class GameServer {
 
     private void channelWrite(SocketChannel channel, String message) {
         try {
+            LOGGER.info("writing message: " + message);
             Packet packet = new Packet();
             packet.append(message);
-            channel.write(ByteBuffer.wrap(Packet.encode(packet)));
+            int written = channel.write(ByteBuffer.wrap(Packet.encode(packet)));
+            LOGGER.info("written: " + written);
+
+            /*
+            ByteBuffer writeBuffer = ByteBuffer.allocateDirect(1024);
+            writeBuffer.clear();
+            writeBuffer.put(Packet.encode(packet));
+            writeBuffer.flip();
+
+            int bytesWritten = 0;
+            int toWrite = writeBuffer.remaining();
+
+            try {
+                while (bytesWritten != toWrite) {
+                    bytesWritten += channel.write(writeBuffer);
+                }
+            } catch (Exception e) {
+                LOGGER.warning("cannot write to channel");
+                e.printStackTrace();
+            }
+
+            writeBuffer.rewind();
+            */
         } catch (IOException e) {
             e.printStackTrace();
         }
