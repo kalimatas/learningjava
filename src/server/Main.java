@@ -11,10 +11,7 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.logging.Logger;
 
 public class Main {
@@ -92,15 +89,16 @@ class GameServer {
         LOGGER.info("starting client");
 
         try {
-            readSelector = Selector.open();
             csc = SocketChannel.open(new InetSocketAddress(InetAddress.getLoopbackAddress(), PORT));
             csc.configureBlocking(false);
+
+            readSelector = Selector.open();
             csc.register(readSelector, SelectionKey.OP_READ);
 
-            while (clientRunning) {
-                // Send messages to server
-                //(new ClientWriter(csc)).start();
+            // Send messages to server
+            //(new Timer()).schedule(new ClientScheduleWriter(csc), 0, 4000);
 
+            while (clientRunning) {
                 readSelector.selectNow();
 
                 Set<SelectionKey> readKeys = readSelector.selectedKeys();
@@ -120,7 +118,7 @@ class GameServer {
                     }
                 }
 
-                Thread.sleep(300);
+                Thread.sleep(200);
             }
 
         } catch (IOException e) {
@@ -155,8 +153,8 @@ class GameServer {
             if (baos.size() > 0) {
                 System.out.println("read: " + baos.size() + "\n");
                 //return Packet.decode(baos.toByteArray());
-                //return asciiDecoder.decode(ByteBuffer.wrap(baos.toByteArray())).toString();
-                return "test message";
+                return asciiDecoder.decode(ByteBuffer.wrap(baos.toByteArray())).toString();
+                //return "test message";
             }
 
         //} catch (IOException | ClassNotFoundException e) {
@@ -238,9 +236,11 @@ class GameServer {
             LOGGER.info("writing message: " + message);
             Packet packet = new Packet();
             packet.append(message);
-            int written = channel.write(ByteBuffer.wrap(Packet.encode(packet)));
-            //int written = channel.write(ByteBuffer.wrap(message.getBytes()));
+            //int written = channel.write(ByteBuffer.wrap(Packet.encode(packet)));
+            int written = channel.write(ByteBuffer.wrap(message.getBytes()));
             //LOGGER.info("written: " + written);
+
+            Thread.sleep(100);
 
             /*
             ByteBuffer writeBuffer = ByteBuffer.allocateDirect(1024);
@@ -262,7 +262,7 @@ class GameServer {
 
             writeBuffer.rewind();
             */
-        } catch (IOException e) {
+        } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
     }
@@ -272,48 +272,24 @@ class GameServer {
     }
 }
 
-class ClientWriter extends Thread
-{
+class ClientScheduleWriter extends TimerTask {
     private SocketChannel channel;
-    private boolean running = true;
 
-    ClientWriter(SocketChannel channel) {
+    ClientScheduleWriter(SocketChannel channel) {
         this.channel = channel;
     }
 
+    @Override
     public void run() {
-        int elapsed = 0, step = 200;
-        while (running) {
-            try {
-                Thread.sleep(step);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-                break;
-            }
-
-            elapsed += step;
-
-            // each two seconds
-            if (elapsed >= 4000) {
-                try {
-                    String message = "message from client: " + channel.socket().getInetAddress();
-                    //Packet packet = new Packet();
-                    //packet.append(message);
-                    //channel.write(ByteBuffer.wrap(Packet.encode(packet)));
-                    channel.write(ByteBuffer.wrap(message.getBytes()));
-
-                    elapsed = 0;
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    shutdown();
-                }
-
-            }
+        try {
+            System.out.println("writing message to server\n");
+            String message = "message from client: " + channel.socket().getInetAddress();
+            //Packet packet = new Packet();
+            //packet.append(message);
+            //channel.write(ByteBuffer.wrap(Packet.encode(packet)));
+            channel.write(ByteBuffer.wrap(message.getBytes()));
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-    }
-
-    public void shutdown() {
-        running = false;
-        interrupt();
     }
 }
