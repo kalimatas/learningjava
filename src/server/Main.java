@@ -43,6 +43,10 @@ public class Main {
 class Packet implements Serializable {
     private LinkedList data = new LinkedList();
 
+    public int size() {
+        return data.size();
+    }
+
     @SuppressWarnings("unchecked")
     public void append(Object obj) {
         data.add(obj);
@@ -73,9 +77,12 @@ class GameServer {
     private static final int PORT = 4444;
     private static final Logger LOGGER = Logger.getLogger(GameServer.class.getName());
 
+    private static final int PACKET_SIZE_LENGTH = 4;
+
     private SocketChannel csc;
     private boolean clientRunning = true;
-    private ByteBuffer clientReadBuffer = ByteBuffer.allocate(1024);
+    private ByteBuffer clientReadBuffer;
+    private ByteBuffer packetSizeReadBuffer = ByteBuffer.allocate(PACKET_SIZE_LENGTH);
     private CharsetDecoder asciiDecoder = Charset.forName("US-ASCII").newDecoder();
 
     private List<SocketChannel> clients = new LinkedList<>();
@@ -110,11 +117,11 @@ class GameServer {
 
                     SocketChannel channel = (SocketChannel) key.channel();
 
-                    //Packet packet = readPacket(channel);
-                    String packet = readPacket(channel);
-                    if (packet != null) {
-                        //LOGGER.info((String) packet.get());
-                        LOGGER.info(packet);
+                    Packet packet = readPacket(channel);
+                    //String packet = readPacket(channel);
+                    if (packet != null && packet.size() > 0) {
+                        LOGGER.info((String) packet.get());
+                        //LOGGER.info(packet);
                     }
                 }
 
@@ -129,12 +136,16 @@ class GameServer {
         }
     }
 
-    private String readPacket(SocketChannel channel) {
+    private Packet readPacket(SocketChannel channel) {
         LOGGER.info("reading packet");
 
         try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            int bytesRead = channel.read(clientReadBuffer);
+            int bytesRead;
+
+            // Read packet size
+            packetSizeReadBuffer.clear();
+            bytesRead = channel.read(packetSizeReadBuffer);
+            System.out.println("bytes read: " + bytesRead);
 
             if (bytesRead == -1) {
                 channel.close();
@@ -143,19 +154,49 @@ class GameServer {
                 return null;
             }
 
-            while (bytesRead != 0) {
-                clientReadBuffer.flip();
-                baos.write(clientReadBuffer.array(), 0, bytesRead);
-                bytesRead = channel.read(clientReadBuffer);
-                clientReadBuffer.clear();
+            if (bytesRead == 0) return null;
+
+            /*
+            for (byte b : packetSizeReadBuffer.array()) {
+                System.out.format("0x%02x ", b);
+            }
+            */
+
+            packetSizeReadBuffer.flip();
+            int packetSize = packetSizeReadBuffer.getInt();
+            System.out.println("got int: " + packetSize);
+
+            // Read packet
+            /*
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            clientReadBuffer = ByteBuffer.allocate(packetSize);
+            bytesRead = channel.read(clientReadBuffer);
+            System.out.println("read bytes for packet: " + bytesRead);
+
+            if (bytesRead == -1) {
+                channel.close();
+                clientRunning = false;
+                LOGGER.info("shutting down...");
+                return null;
             }
 
+            if (bytesRead == 0) return null;
+
+            // clientReadBuffer.position()
+            //while (bytesRead != 0) {
+                clientReadBuffer.flip();
+                baos.write(clientReadBuffer.array(), 0, bytesRead);
+                //bytesRead = channel.read(clientReadBuffer);
+                clientReadBuffer.clear();
+            //}
+
             if (baos.size() > 0) {
-                System.out.println("read: " + baos.size() + "\n");
-                //return Packet.decode(baos.toByteArray());
-                return asciiDecoder.decode(ByteBuffer.wrap(baos.toByteArray())).toString();
+                //System.out.println("read: " + baos.size() + "\n");
+                return Packet.decode(baos.toByteArray());
+                //return asciiDecoder.decode(ByteBuffer.wrap(baos.toByteArray())).toString();
                 //return "test message";
             }
+            */
 
         //} catch (IOException | ClassNotFoundException e) {
         } catch (IOException e) {
@@ -236,11 +277,22 @@ class GameServer {
             LOGGER.info("writing message: " + message);
             Packet packet = new Packet();
             packet.append(message);
+            byte[] encodedPacket = Packet.encode(packet);
+            int packetSize = encodedPacket.length;
+            LOGGER.info("packet size sent: " + packetSize);
+
+            ByteBuffer packetSizeBuffer = ByteBuffer.allocate(PACKET_SIZE_LENGTH).putInt(packetSize);
+            packetSizeBuffer.flip();
+            channel.write(packetSizeBuffer);
+
+            //ByteBuffer packetBuffer = ByteBuffer.wrap(encodedPacket);
+            //packetBuffer.flip();
+            //channel.write(packetBuffer);
             //int written = channel.write(ByteBuffer.wrap(Packet.encode(packet)));
-            int written = channel.write(ByteBuffer.wrap(message.getBytes()));
+            //int written = channel.write(ByteBuffer.wrap(message.getBytes()));
             //LOGGER.info("written: " + written);
 
-            Thread.sleep(100);
+            Thread.sleep(10);
 
             /*
             ByteBuffer writeBuffer = ByteBuffer.allocateDirect(1024);
