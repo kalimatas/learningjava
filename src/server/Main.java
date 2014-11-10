@@ -112,6 +112,7 @@ class GameServer {
                 Iterator<SelectionKey> it = readKeys.iterator();
 
                 while (it.hasNext()) {
+                    LOGGER.info("got next read client");
                     SelectionKey key = it.next();
                     it.remove();
 
@@ -142,6 +143,12 @@ class GameServer {
         try {
             int bytesRead;
 
+            clientReadBuffer = ByteBuffer.allocate(3000);
+            bytesRead = channel.read(clientReadBuffer);
+            System.out.println("read bytes for packet: " + bytesRead);
+
+            if (true) return null;
+
             // Read packet size
             packetSizeReadBuffer.clear();
             bytesRead = channel.read(packetSizeReadBuffer);
@@ -167,7 +174,6 @@ class GameServer {
             System.out.println("got int: " + packetSize);
 
             // Read packet
-            /*
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             clientReadBuffer = ByteBuffer.allocate(packetSize);
             bytesRead = channel.read(clientReadBuffer);
@@ -196,10 +202,9 @@ class GameServer {
                 //return asciiDecoder.decode(ByteBuffer.wrap(baos.toByteArray())).toString();
                 //return "test message";
             }
-            */
 
-        //} catch (IOException | ClassNotFoundException e) {
-        } catch (IOException e) {
+        } catch (IOException | ClassNotFoundException e) {
+        //} catch (IOException e) {
             e.printStackTrace();
         }
 
@@ -247,7 +252,7 @@ class GameServer {
                 //SelectionKey readKey = clientChannel.register(readSelector, SelectionKey.OP_READ);
 
                 // send broadcast
-                sendBroadcastingMessage("New client: " + clientChannel.socket().getInetAddress() + "\n");
+                //sendBroadcastingMessage("New client: " + clientChannel.socket().getInetAddress() + "\n");
 
                 // send welcome to the new client
                 sendMessage(clientChannel, "Welcome to server! There are " + clients.size() + " online.\n");
@@ -285,9 +290,10 @@ class GameServer {
             packetSizeBuffer.flip();
             channel.write(packetSizeBuffer);
 
-            //ByteBuffer packetBuffer = ByteBuffer.wrap(encodedPacket);
-            //packetBuffer.flip();
-            //channel.write(packetBuffer);
+            ByteBuffer packetBuffer = ByteBuffer.wrap(encodedPacket);
+            packetBuffer.flip();
+            packetBuffer.rewind();
+            channel.write(packetBuffer);
             //int written = channel.write(ByteBuffer.wrap(Packet.encode(packet)));
             //int written = channel.write(ByteBuffer.wrap(message.getBytes()));
             //LOGGER.info("written: " + written);
